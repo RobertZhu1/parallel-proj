@@ -20,8 +20,8 @@ sbatch -N 4 --partition=el8 --gres=gpu:1 -t 30 ./slurmSpectrum.sh
 taskset -c 0-159:4 mpirun -N 32 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 6144 48
 sbatch -N 8 --partition=el8 --gres=gpu:1 -t 30 ./slurmSpectrum.sh
 
-Hybrid:
-1 compute node 6 ranks 6 GPU: sim_kernel<<<32,32>>>
+Hybrid: sim_kernel<<<32,32>>>
+1 compute node 6 ranks 6 GPU
 taskset -c 0-159:4 mpirun -N 6 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 262144 2048
 sbatch -N 1 --partition=el8 --gres=gpu:6 -t 30 ./slurmSpectrum.sh
 2 compute nodes 12 ranks 12 GPU
@@ -63,8 +63,8 @@ sbatch -N 4 --partition=el8 --gres=gpu:1 -t 30 ./slurmSpectrum.sh
 taskset -c 0-159:4 mpirun -N 32 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 24576 192
 sbatch -N 8 --partition=el8 --gres=gpu:1 -t 30 ./slurmSpectrum.sh
 
-Hybrid:
-1 compute node 6 ranks 6 GPU: sim_kernel<<<32,32>>>
+Hybrid: sim_kernel<<<32,32>>>
+1 compute node 6 ranks 6 GPU
 taskset -c 0-159:4 mpirun -N 6 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 131072 1024
 sbatch -N 1 --partition=el8 --gres=gpu:6 -t 30 ./slurmSpectrum.sh
 2 compute nodes 12 ranks 12 GPU
