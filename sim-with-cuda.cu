@@ -247,6 +247,7 @@ extern "C" void printFlight(struct flight f){
 extern "C" bool sim_kernelLaunch(int * count_to_send, unsigned int current_time)
 {
 	sim_kernel<<<32,32>>>(flights, airports, num_flights, num_airports, g_recv_flights, g_send_flights, count_to_send, numranks, current_time);
+	//sim_kernel<<<1,1>>>(flights, airports, num_flights, num_airports, g_recv_flights, g_send_flights, count_to_send, numranks, current_time);
 
     // Calls this to guarantee that the kernel will finish computation before swapping
     cudaDeviceSynchronize();

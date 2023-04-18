@@ -8,6 +8,9 @@
 #include<string.h>
 #include<stddef.h>
 #include "airport.h"
+#include "clockcycle.h"
+
+#define clock_frequency 512000000
 
 // The airports of each rank are stored here
 struct airport *airports;
@@ -56,13 +59,12 @@ int main(int argc, char *argv[])
     num_flights = atoi(argv[2]);
     num_airports = atoi(argv[3]);
 
-    double startTime;
+    double inputstartTime;
 
 	// Sets the initial time after MPI has been initialized
-	if(myrank == 0)
-	{
+	if (myrank == 0) {
 		printf("This is a simulation of scheduled flights running in parallel.\n");
-		startTime = MPI_Wtime();
+		inputstartTime = clock_now();
 	}
 
 	// Initializes the world with the specified pattern
@@ -98,6 +100,18 @@ int main(int argc, char *argv[])
 	MPI_File_set_view(file, myrank*bufsize*sizeof(char), MPI_CHAR, MPI_CHAR, "native", MPI_INFO_NULL);	
 	MPI_File_read(file, cfile, bufsize, MPI_CHAR, &file_status);
 	MPI_Get_count(&file_status, MPI_CHAR, &nchars);
+
+	if(myrank == 0)
+		printf("Inputting to File Time Elapsed: %f seconds\n", (clock_now() - inputstartTime) / clock_frequency);
+
+	double startTime;
+
+	// Sets the initial time after MPI has been initialized
+	if(myrank == 0)
+	{
+		printf("This is a simulation of scheduled flights running in parallel.\n");
+		startTime = clock_now();
+	}
 	cfile[nchars] = (char)0;
 	//printf("%s\n", cfile);
 	//printf("Rank %d:\n", myrank);
@@ -205,7 +219,7 @@ int main(int argc, char *argv[])
     // Prints the total time elapsed for the program
     if(myrank == 0)
     {
-    	printf("Time elapsed: %f seconds\n", MPI_Wtime() - startTime);
+    	printf("Time elapsed: %f seconds\n", (clock_now() - startTime) / clock_frequency);
     }
 	
 	//Write code used for testing write I/O speed in comments below
@@ -215,7 +229,7 @@ int main(int argc, char *argv[])
     
 	double outputStartTime;
 	if(myrank == 0)
-		outputStartTime = MPI_Wtime();
+		outputStartTime = clock_now();
 	int* buffer = malloc(8*num_flights*sizeof(int));
 	unsigned int ind = 0;
 	for(int i = 0; i < num_flights; i++)
@@ -249,7 +263,7 @@ int main(int argc, char *argv[])
 	MPI_File_write(outfile, buffer, ind, MPI_INT, &file_status2);
 	
 	if(myrank == 0)
-		printf("Outputting to File Time Elapsed: %f seconds\n", MPI_Wtime() - outputStartTime);
+		printf("Outputting to File Time Elapsed: %f seconds\n", (clock_now() - outputStartTime) / clock_frequency);
 	
 	MPI_File_close(&file);
 	MPI_File_close(&outfile);
