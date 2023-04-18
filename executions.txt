@@ -1,38 +1,82 @@
 Strong scaling:
-total deliveries: 1572864 = 48*32^3
-total locations: 12288 = 48*2^8
+total deliveries: 1572864 = 48*32^3 (Inpute file size: 202899456 bytes)
+total locations: 12288 = 48*2^8 (Output file size: 13077692 bytes)
 
 Serial: sim_kernel<<<1,1>>>
 taskset -c 0-159:4 mpirun -N 1 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 1572864 12288
 sbatch -N 1 --partition=el8 --gres=gpu:1 -t 30 ./slurmSpectrum.sh
 
+Inputting to File Time Elapsed: 0.295102 seconds
+Time elapsed: 142.545630 seconds
+Outputting to File Time Elapsed: 0.039863 seconds
+
 MPI_rank only: sim_kernel<<<1,1>>>
 1 compute node 32 ranks:
 taskset -c 0-159:4 mpirun -N 32 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 49152 384
 sbatch -N 1 --partition=el8 --gres=gpu:1 -t 30 ./slurmSpectrum.sh
+
+Inputting to File Time Elapsed: 4.624238 seconds
+Time elapsed: 25.021275 seconds
+Outputting to File Time Elapsed: 0.008008 seconds
+
 2 compute node 64 ranks:
 taskset -c 0-159:4 mpirun -N 32 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 24576 192
 sbatch -N 2 --partition=el8 --gres=gpu:1 -t 30 ./slurmSpectrum.sh
+
+Inputting to File Time Elapsed: 4.850974 seconds
+Time elapsed: 12.466650 seconds
+Outputting to File Time Elapsed: 0.674712 seconds
+
 4 compute node 128 ranks:
 taskset -c 0-159:4 mpirun -N 32 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 12288 96
 sbatch -N 4 --partition=el8 --gres=gpu:1 -t 30 ./slurmSpectrum.sh
+
+Inputting to File Time Elapsed: 4.875984 seconds
+Time elapsed: 5.694224 seconds
+Outputting to File Time Elapsed: 0.112984 seconds
+
 8 compute node 256 ranks:
 taskset -c 0-159:4 mpirun -N 32 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 6144 48
 sbatch -N 8 --partition=el8 --gres=gpu:1 -t 30 ./slurmSpectrum.sh
+
+Inputting to File Time Elapsed: 4.987215 seconds
+Time elapsed: 3.070691 seconds
+Outputting to File Time Elapsed: 0.925803 seconds
 
 Hybrid: sim_kernel<<<32,32>>>
 1 compute node 6 ranks 6 GPU
 taskset -c 0-159:4 mpirun -N 6 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 262144 2048
 sbatch -N 1 --partition=el8 --gres=gpu:6 -t 30 ./slurmSpectrum.sh
+
+Inputting to File Time Elapsed: 1.009581 seconds
+Time elapsed: 0.197594 seconds
+Outputting to File Time Elapsed: 0.044510 seconds
+
 2 compute nodes 12 ranks 12 GPU
 taskset -c 0-159:4 mpirun -N 6 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 131072 1024
 sbatch -N 2 --partition=el8 --gres=gpu:6 -t 30 ./slurmSpectrum.sh
+
+Inputting to File Time Elapsed: 1.060229 seconds
+Time elapsed: 0.138762 seconds
+Outputting to File Time Elapsed: 0.004129 seconds
+
 4 compute nodes 24 ranks 24 GPU
 taskset -c 0-159:4 mpirun -N 6 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 65536 512
 sbatch -N 4 --partition=el8 --gres=gpu:6 -t 30 ./slurmSpectrum.sh
+
+Inputting to File Time Elapsed: 1.082862 seconds
+Time elapsed: 0.073310 seconds
+Outputting to File Time Elapsed: 0.620081 seconds
+
 8 compute nodes 48 ranks 48 GPU
 taskset -c 0-159:4 mpirun -N 6 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 32768 256
 sbatch -N 8 --partition=el8 --gres=gpu:6 -t 30 ./slurmSpectrum.sh
+
+Inputting to File Time Elapsed: 1.096804 seconds
+Time elapsed: 0.046200 seconds
+Outputting to File Time Elapsed: 0.753655 seconds
+
+
 
 
 Weak scaling:
@@ -53,26 +97,71 @@ MPI_rank only: sim_kernel<<<1,1>>>
 1 compute node 32 ranks:
 taskset -c 0-159:4 mpirun -N 32 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 24576 192
 sbatch -N 1 --partition=el8 --gres=gpu:1 -t 30 ./slurmSpectrum.sh
+
+Inputting to File Time Elapsed: 4.884125 seconds
+Time elapsed: 97.302438 seconds
+Outputting to File Time Elapsed: 0.064368 seconds
+
+
 2 compute node 64 ranks:
 taskset -c 0-159:4 mpirun -N 32 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 24576 192
 sbatch -N 2 --partition=el8 --gres=gpu:1 -t 30 ./slurmSpectrum.sh
+
+Inputting to File Time Elapsed: 4.869374 seconds
+Time elapsed: 97.510742 seconds
+Outputting to File Time Elapsed: 0.100045 seconds
+
+
 4 compute node 128 ranks:
 taskset -c 0-159:4 mpirun -N 32 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 24576 192
 sbatch -N 4 --partition=el8 --gres=gpu:1 -t 30 ./slurmSpectrum.sh
+
+Inputting to File Time Elapsed: 4.924020 seconds
+Time elapsed: 97.492595 seconds
+Outputting to File Time Elapsed: 0.210115 seconds
+
+
 8 compute node 256 ranks:
 taskset -c 0-159:4 mpirun -N 32 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 24576 192
 sbatch -N 8 --partition=el8 --gres=gpu:1 -t 30 ./slurmSpectrum.sh
+
+Inputting to File Time Elapsed: 4.994411 seconds
+Time elapsed: 97.983030 seconds
+Outputting to File Time Elapsed: 1.110743 seconds
+
 
 Hybrid: sim_kernel<<<32,32>>>
 1 compute node 6 ranks 6 GPU
 taskset -c 0-159:4 mpirun -N 6 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 131072 1024
 sbatch -N 1 --partition=el8 --gres=gpu:6 -t 30 ./slurmSpectrum.sh
+
+Inputting to File Time Elapsed: 1.150570 seconds
+Time elapsed: 0.436420 seconds
+Outputting to File Time Elapsed: 0.076537 seconds
+
+
 2 compute nodes 12 ranks 12 GPU
 taskset -c 0-159:4 mpirun -N 6 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 131072 1024
 sbatch -N 2 --partition=el8 --gres=gpu:6 -t 30 ./slurmSpectrum.sh
+
+Inputting to File Time Elapsed: 1.105209 seconds
+Time elapsed: 0.434973 seconds
+Outputting to File Time Elapsed: 0.170436 seconds
+
+
 4 compute nodes 24 ranks 24 GPU
 taskset -c 0-159:4 mpirun -N 6 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 131072 1024
 sbatch -N 4 --partition=el8 --gres=gpu:6 -t 30 ./slurmSpectrum.sh
+
+Inputting to File Time Elapsed: 1.151805 seconds
+Time elapsed: 0.454640 seconds
+Outputting to File Time Elapsed: 0.463267 seconds
+
+
 8 compute nodes 48 ranks 48 GPU
 taskset -c 0-159:4 mpirun -N 6 /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/sim-cuda-mpi-exe deliver_test 131072 1024
 sbatch -N 8 --partition=el8 --gres=gpu:6 -t 30 ./slurmSpectrum.sh
+
+Inputting to File Time Elapsed: 1.186777 seconds
+Time elapsed: 0.493607 seconds
+Outputting to File Time Elapsed: 1.059811 seconds
