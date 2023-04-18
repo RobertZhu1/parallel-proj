@@ -86,7 +86,7 @@ int main(int argc, char *argv[])
 	MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &file);
 	MPI_File_get_size(file, &filesize);
 
-	MPI_File_open(MPI_COMM_WORLD, "output.txt", MPI_MODE_CREATE|MPI_MODE_WRONLY, MPI_INFO_NULL, &outfile);
+	MPI_File_open(MPI_COMM_WORLD, "output", MPI_MODE_CREATE|MPI_MODE_WRONLY, MPI_INFO_NULL, &outfile);
 
 	int bufsize = filesize/numranks;
 	int nchars;
@@ -216,20 +216,37 @@ int main(int argc, char *argv[])
 	double outputStartTime;
 	if(myrank == 0)
 		outputStartTime = MPI_Wtime();
+	int* buffer = malloc(8*num_flights*sizeof(int));
+	unsigned int ind = 0;
 	for(int i = 0; i < num_flights; i++)
 	{
 		
 		struct flight f = flights[i];
 		if(f.stage == -1)
 			continue;
-		char buffer[1024];	
-		int n = sprintf(buffer, "%d %d %d %d %u %u %u %u\n", f.id, f.source_id, f.destination_id, f.stage, 
-			f.starting_time, f.landing_time, f.travel_time, f.wait_time);
-		buffer[n] = '\0';
+		// char buffer[1024];	
+		// int n = sprintf(buffer, "%d %d %d %d %u %u %u %u\n", f.id, f.source_id, f.destination_id, f.stage, 
+		// 	f.starting_time, f.landing_time, f.travel_time, f.wait_time);
+		// buffer[n] = '\0';
+
+		// int* buffer = malloc(8*sizeof(int));
+		buffer[ind] = f.id;
+		buffer[ind+1] = f.source_id;
+		buffer[ind+2] = f.destination_id;
+		buffer[ind+3] = f.stage;
+		buffer[ind+4] = f.starting_time;
+		buffer[ind+5] = f.landing_time;
+		buffer[ind+6] = f.travel_time;
+		buffer[ind+7] = f.wait_time;
+		ind += 8;
+		// MPI_File_seek(outfile, 0, MPI_SEEK_END);
+		// MPI_File_write(outfile, buffer, 8, MPI_INT, &file_status2);
 		//MPI_File_set_view(file, myrank*(num_flights/numranks)*sizeof(char), MPI_CHAR, MPI_CHAR, "native", MPI_INFO_NULL);	
-		MPI_File_seek(outfile, 0, MPI_SEEK_END);
-		MPI_File_write(outfile, buffer, n, MPI_CHAR, &file_status2);
+		// MPI_File_seek(outfile, 0, MPI_SEEK_END);
+		// MPI_File_write(outfile, buffer, n, MPI_CHAR, &file_status2);
 	}
+	MPI_File_seek(outfile, 0, MPI_SEEK_END);
+	MPI_File_write(outfile, buffer, ind, MPI_INT, &file_status2);
 	
 	if(myrank == 0)
 		printf("Outputting to File Time Elapsed: %f seconds\n", MPI_Wtime() - outputStartTime);
