@@ -1,6 +1,6 @@
 # Parallel-Project
 
-CSCI 6490 Parallel Programming Project
+CSCI 6490/4320 Parallel Programming Project
 
 ## About
 
@@ -13,7 +13,7 @@ We are going to model deliveries throughout one day by processing the deliveries
 ## Usage
 
 ### Generate deliveries
-The **generate.py script** randomly generates a list of deliveries given simultation duration.
+The **generate.py script** randomly generates a list of deliveries given simulation duration.
 
 Execution: python generate.py 1572864 12288 24 100 delivery_test 
 
