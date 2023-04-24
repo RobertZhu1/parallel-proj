@@ -1,8 +1,3 @@
-
-#include<stdio.h>
-#include<stdlib.h>
-#include<unistd.h>
-#include<stdbool.h>
 #include<cuda.h>
 #include<cuda_runtime.h>
 #include "airport.h"
@@ -16,9 +11,11 @@ extern int num_deliveries;
 extern struct delivery **outgoing_deliveries;
 extern struct delivery *incoming_deliveries; 
 
-extern int world_rank; // current rank
+// Rank number of current MPI rank
+extern int world_rank;
 
-extern int world_size; // total rank
+// Total number of MPI ranks
+extern int world_size;
 
 extern "C" void sim_initMaster()
 {
@@ -36,127 +33,164 @@ extern "C" void sim_initMaster()
 	}
 	int recv_size = 10000;
 	int send_size = 5000;
-	int delivery_lim = 6000000;
-	int serv_loc_lim = 361440;
+	int max_deliveries = 6000000;
+	int max_transit_centers = 361440;
 
-	// send and recv init
-	cudaMallocManaged(&outgoing_deliveries, (world_size*sizeof(struct delivery*)));
-	cudaMallocManaged(&incoming_deliveries, recv_size*sizeof(struct delivery));
-	for (int i = 0; i < world_size; i++) cudaMallocManaged(&outgoing_deliveries[i], send_size*sizeof(struct delivery));
-
-	// deliveries and service location init
-	cudaMallocManaged(&deliveries, delivery_lim*sizeof(struct delivery));
-	cudaMallocManaged(&transit_centers, serv_loc_lim*sizeof(struct transit_center));
-	for (int i = 0; i < num_transit_centers; i++) {
-		transit_centers[i].num_conveyor_belts = 1;
-		cudaMallocManaged(&transit_centers[i].conveyor_belt, transit_centers[i].num_conveyor_belts * sizeof(struct conveyor_belt));
+	// Allocates data for the send and recv arrays
+	cudaMallocManaged(&outgoing_deliveries, (world_size * sizeof(struct delivery *)));
+	cudaMallocManaged(&incoming_deliveries, recv_size * sizeof(struct delivery));
+	for(int i = 0; i < world_size; i++){
+		cudaMallocManaged(&outgoing_deliveries[i], send_size * sizeof(struct delivery));
 	}
-	for (int i = 0; i < num_deliveries; i++) deliveries[i].status = LOST_DELIVERY;
+
+	// Allocates space for the flights and airports
+	cudaMallocManaged(&deliveries, max_deliveries * sizeof(struct delivery));
+	cudaMallocManaged(&transit_centers, max_transit_centers * sizeof(struct transit_center));
+
+	// Initialize airports and flights
+	for(int i = 0; i < num_transit_centers; i++){
+		transit_centers[i].num_conveyor_belts = 1;
+		cudaMallocManaged(&transit_centers[i].conveyor_belts, transit_centers[i].num_conveyor_belts * sizeof(struct conveyor_belt));
+	}
+	for(int i = 0; i < num_deliveries; i++){
+		deliveries[i].status = LOST_DELIVERY;
+	}
 
 }
 
-__global__ void sim_kernel(struct delivery *deli, struct transit_center *serv_loc, unsigned int deli_lim, 
-	struct delivery *recv_deli, struct delivery **send_deli, int *count_sent, int world_size, 
-	unsigned int current_time){
-   	// kernel function, simulates 1 time unit
+/* sim_kernel is the kernel function called from the host. 
+   It simulates one unit of discrete time.
+ */
+__global__ void sim_kernel(struct delivery * deliveries,
+                           struct transit_center * transit_centers, 
+                           unsigned int num_deliveries,
+                           unsigned int num_transit_centers,
+                           struct delivery * recv_flights,
+                           struct delivery ** send_flights,
+                           int * count_sent,
+                           int world_size,
+                           unsigned int current_time){
+    /*
+	PSUDO CODE:
+	-> calculate thread id
+	-> go to that spot in the array, and get the airplane that is going to land next
+	-> see where it is supposed to land
+	-> try to change the airport that it will land at by adding it to the runway queue 
+	*/
 
-	int ind;
-	for (ind = blockIdx.x * blockDim.x + threadIdx.x; ind < deli_lim; ind += blockDim.x * gridDim.x) {
-		// loop through all deliveries, compute next status
-		if (deli[ind].status == LOST_DELIVERY) {
-			// Checks recv deliveries to see if any new deliveries can be added in
+	int index;
+	
+	// Loops through flights and computes their next stage
+	for(index = blockIdx.x * blockDim.x + threadIdx.x; index < num_deliveries; index += blockDim.x * gridDim.x)
+	{
+		// Checks recv flights to see if any new flights can be added in
+		if(deliveries[index].status == LOST_DELIVERY){
 			int recv_index = atomicSub(&count_sent[world_size], 1) - 1;
-			if (recv_index >= 0) memcpy(&deli[ind], &recv_deli[recv_index], sizeof(struct delivery));
+			if(recv_index >= 0){
+				memcpy(&deliveries[index], &recv_flights[recv_index], sizeof(struct delivery));
+			}
 		}
 
-		int deli_stage = deli[ind].status;
-		if (deli_stage == WAITING && deli[ind].starting_time <= current_time) {
-			// current time = takeoff time, set to next status
-			deli[ind].status = STAMPED;
-			deli_stage = STAMPED;
+		int delivery_status = deliveries[index].status;
+
+		// Sets flight stage if flight has reached takeoff time
+		if(delivery_status == WAITING && deliveries[index].starting_time <= current_time){
+			deliveries[index].status = STAMPED;
+			delivery_status = STAMPED;
 		}
 
-		int serv_loc_ind = deli[ind].source_id / world_size;
-		if (deli_stage == STAMPED) {
-			// if preparing to start delivery, wait until resource alloc
-			
-			for (int i = 0; i < serv_loc[serv_loc_ind].num_conveyor_belts; i++) {
-				// check if can start delivery now
-				if (!atomicCAS(&serv_loc[serv_loc_ind].conveyor_belt[i].status, 0, 1)) {
-					if (serv_loc[serv_loc_ind].conveyor_belt[i].last_access != current_time) {
-						deli[ind].status = LEAVE_SOURCE;
-						deli[ind].current_conveyor_id = i;
-						deli[ind].processing_time = 1;
-						deli[ind].processing_time--;
+		if(delivery_status == STAMPED){
+			int transit_center_index = deliveries[index].source_id / world_size;
+
+			// Attempts to obtain a runway in order to takeoff
+			for(int i = 0; i < transit_centers[transit_center_index].num_conveyor_belts; i++){
+				int available = !atomicCAS(&transit_centers[transit_center_index].conveyor_belts[i].status, 0, 1);
+				if(available){
+					if(transit_centers[transit_center_index].conveyor_belts[i].last_access != current_time){
+						deliveries[index].status = LEAVE_SOURCE;
+						deliveries[index].current_conveyor_id = i;
+						deliveries[index].processing_time = 1;
+						deliveries[index].processing_time--;
 						break;
 					}
-					else atomicExch(&serv_loc[serv_loc_ind].conveyor_belt[i].status, 0);
+					else{
+						atomicExch(&transit_centers[transit_center_index].conveyor_belts[i].status, 0);
+					}
 				}
 			}
 
-			if (deli[ind].status == STAMPED) deli[ind].wait_time++;
-			// cannot start delivery now, wait for next time unit
-		}
-		else if (deli_stage == LEAVE_SOURCE){
-			deli[ind].processing_time--;
-
-			// Advances the status to cruising if the delivery has completed taxiing
-			if (deli[ind].processing_time == 0) {
-				deli[ind].status = IN_TRANSIT;
-				int conveyor_belt_ind = deli[ind].current_conveyor_id;
-
-				// Sets last access time of conveyor_belt and releases conveyor_belt
-				serv_loc[serv_loc_ind].conveyor_belt[conveyor_belt_ind].last_access = current_time;
-				atomicExch(&serv_loc[serv_loc_ind].conveyor_belt[conveyor_belt_ind].status, 0);
+			// Increments wait time if flight could not get runway
+			if(deliveries[index].status == STAMPED){
+				deliveries[index].wait_time++;
 			}
 		}
-		else if (deli_stage == IN_TRANSIT) {
-			deli[ind].transit_time--;
-			if (deli[ind].transit_time == 0) {
-				deli[ind].status = DELIVERED;
+		else if(delivery_status == LEAVE_SOURCE){
+			deliveries[index].processing_time--;
+
+			// Advances the stage to cruising if the flight has completed taxiing
+			if(deliveries[index].processing_time == 0){
+				deliveries[index].status = IN_TRANSIT;
+				int transit_center_index = deliveries[index].source_id / world_size;
+				int conveyor_index = deliveries[index].current_conveyor_id;
+
+				// Sets last access time of runway and releases runway
+				transit_centers[transit_center_index].conveyor_belts[conveyor_index].last_access = current_time;
+				atomicExch(&transit_centers[transit_center_index].conveyor_belts[conveyor_index].status, 0);
+			}
+		}
+		else if(delivery_status == IN_TRANSIT){
+			deliveries[index].transit_time--;
+			if(deliveries[index].transit_time == 0){
+				deliveries[index].status = ARRIVE_TO_DES;
 
 				// Gets the appropriate rank to send to
-				int current_rank = deli[ind].source_id % world_size;
-				int dest_rank = deli[ind].destination_id % world_size;
+				int current_rank = deliveries[index].source_id % world_size;
+				int dest_rank = deliveries[index].destination_id % world_size;
 
 				// Gets the index to write into and increments the number of elements
 				int send_index = atomicAdd(&count_sent[dest_rank], 1);
-				if (current_rank != dest_rank) {
-					memcpy(&send_deli[dest_rank][send_index], &deli[ind], sizeof(struct delivery));
-					deli[ind].status = LOST_DELIVERY;
+				if(current_rank != dest_rank){
+					memcpy(&send_flights[dest_rank][send_index], &deliveries[index], sizeof(struct delivery));
+					deliveries[index].status = LOST_DELIVERY;
 				}
 			}
 		}
-		else if (deli_stage == DELIVERED) {
-			// Attempts to obtain a conveyor_belt in order to land
-			for (int i = 0; i < serv_loc[serv_loc_ind].num_conveyor_belts; i++) {
-				if (!atomicCAS(&serv_loc[serv_loc_ind].conveyor_belt[i].status, 0, 1)) {
-					if(serv_loc[serv_loc_ind].conveyor_belt[i].last_access != current_time){
-						deli[ind].status = PROCESSING;
-						deli[ind].current_conveyor_id = i;
-						deli[ind].processing_time = 1;
-						deli[ind].processing_time--;
+		else if(delivery_status == ARRIVE_TO_DES){
+			int transit_center_index = deliveries[index].destination_id / world_size;
+
+			// Attempts to obtain a runway in order to land
+			for(int i = 0; i < transit_centers[transit_center_index].num_conveyor_belts; i++){
+				int available = !atomicCAS(&transit_centers[transit_center_index].conveyor_belts[i].status, 0, 1);
+				if(available){
+					if(transit_centers[transit_center_index].conveyor_belts[i].last_access != current_time){
+						deliveries[index].status = PROCESSING;
+						deliveries[index].current_conveyor_id = i;
+						deliveries[index].processing_time = 1;
+						deliveries[index].processing_time--;
 						break;
 					}
-					else atomicExch(&serv_loc[serv_loc_ind].conveyor_belt[i].status, 0);
+					else{
+						atomicExch(&transit_centers[transit_center_index].conveyor_belts[i].status, 0);
+					}
 				}
 			}
 
-			// Increments wait time if delivery could not get conveyor_belt
-			if (deli[ind].status == DELIVERED) {
-				deli[ind].wait_time++;
+			// Increments wait time if flight could not get runway
+			if(deliveries[index].status == ARRIVE_TO_DES){
+				deliveries[index].wait_time++;
 			}
 		}
-		else if (deli_stage == PROCESSING) {
-			deli[ind].processing_time--;
-			if (deli[ind].processing_time == 0) {
-				deli[ind].status = LANDED;
-				deli[ind].arriving_time = current_time + 1;
-				int conveyor_belt_ind = deli[ind].current_conveyor_id;
+		else if(delivery_status == PROCESSING){
+			deliveries[index].processing_time--;
+			if(deliveries[index].processing_time == 0){
+				deliveries[index].status = DELIVERED;
+				deliveries[index].arriving_time = current_time + 1;
+				int transit_center_index = deliveries[index].destination_id / world_size;
+				int conveyor_index = deliveries[index].current_conveyor_id;
 
-				// Sets the last accessed time of the conveyor_belt and releases it
-				serv_loc[serv_loc_ind].conveyor_belt[conveyor_belt_ind].last_access = current_time;
-				atomicExch(&serv_loc[serv_loc_ind].conveyor_belt[conveyor_belt_ind].status, 0);
+				// Sets the last accessed time of the runway and releases it
+				transit_centers[transit_center_index].conveyor_belts[conveyor_index].last_access = current_time;
+				atomicExch(&transit_centers[transit_center_index].conveyor_belts[conveyor_index].status, 0);
 			}
 		}
 
@@ -165,14 +199,16 @@ __global__ void sim_kernel(struct delivery *deli, struct transit_center *serv_lo
 
 /* sim_kernelLaunch launches the kernel from the host.
  */
-extern "C" bool sim_kernelLaunch(int * count_to_send, unsigned int current_time, int hybrid)
+extern "C" bool sim_kernelLaunch(int * outgoing_deliveries_count, unsigned int current_time, int hybrid)
 {
-	if (hybrid == 1) sim_kernel<<<32,32>>>(deliveries, transit_centers, num_deliveries, incoming_deliveries, outgoing_deliveries, count_to_send, world_size, current_time);
-	else sim_kernel<<<1,1>>>(deliveries, transit_centers, num_deliveries, incoming_deliveries, outgoing_deliveries, count_to_send, world_size, current_time);
+	if (hybrid == 1) {
+		sim_kernel<<<32,32>>>(deliveries, transit_centers, num_deliveries, num_transit_centers, incoming_deliveries, outgoing_deliveries, outgoing_deliveries_count, world_size, current_time);
+	} else {
+		sim_kernel<<<1,1>>>(deliveries, transit_centers, num_deliveries, num_transit_centers, incoming_deliveries, outgoing_deliveries, outgoing_deliveries_count, world_size, current_time);
+	}
 
     // Calls this to guarantee that the kernel will finish computation before swapping
     cudaDeviceSynchronize();
     
     return true;    
 }
-

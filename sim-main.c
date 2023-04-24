@@ -2,15 +2,15 @@
 #include "airport.h"
 #include "clockcycle.h"
 
-// The airports of each rank are stored here
-struct transit_center *transit_centers;
+// The transit centers accessible at each rank
+struct transit_center* transit_centers;
 int num_transit_centers;
 
-// The flights departing from airports in current MPI rank
+// The deliveries managed current MPI rank
 struct delivery *deliveries;
 int num_deliveries;
 
-// The flights being sent to and rcvd from are stored here
+// The deliveries going to be received from or sent to other MPI ranks
 struct delivery **outgoing_deliveries;
 struct delivery *incoming_deliveries;
 
@@ -26,7 +26,7 @@ extern bool sim_kernelLaunch(int* outgoing_deliveries_count, unsigned int curren
 // Output: MPI_Datatype delivery_struct
 // Purpose: Translate the delivery_struct into a MPI datatype
 /***********************************************************************************************************/
-MPI_Datatype getDeliveryDatatype(){
+MPI_Datatype getDeliveryDatatype() {
     int block_lengths[10] = {1,1,1,1,1,1,1,1,1,1};
     MPI_Datatype types[10] = {MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_UNSIGNED, MPI_UNSIGNED, MPI_UNSIGNED, MPI_UNSIGNED, MPI_UNSIGNED};
     MPI_Aint relloc[10];
@@ -97,16 +97,16 @@ void MPI_read_input(char* file_name, int world_rank, int world_size) {
 			if(field_number == 4) arrival_time = number; // arrival time of delievery
 		   	field = strtok(NULL, ",");
 			field_number++;
-			if(field_number == 5) { // line process finished, add data to flight struct
-				flights[i].id = id;
-                flights[i].source_id = source / world_size * world_size + world_rank; // make sure the source location belongs to the rank
-                flights[i].destination_id = destination;
-                flights[i].stage = WAITING;
-                flights[i].current_runway_id = -1;
-                flights[i].starting_time = depart_time;
-                flights[i].travel_time = arrival_time - depart_time;
-                flights[i].taxi_time = 0;
-                flights[i].wait_time = 0;
+			if(field_number == 5) { // line process finished, add data to delivery struct
+				deliveries[i].id = id;
+                deliveries[i].source_id = source / world_size * world_size + world_rank; // make sure the source location belongs to the rank
+                deliveries[i].destination_id = destination;
+                deliveries[i].status = WAITING;
+                deliveries[i].current_conveyor_id = -1;
+                deliveries[i].starting_time = depart_time;
+                deliveries[i].transit_time = arrival_time - depart_time;
+                deliveries[i].processing_time = 0;
+                deliveries[i].wait_time = 0;
 			}
 		}
 	}
@@ -138,17 +138,17 @@ void MPI_write_output(int num_deliveries, int world_rank, int world_size) {
 	int* rank_buffer = malloc(8*num_deliveries*sizeof(int));
 	unsigned int ind = 0;
 	for(int i = 0; i < num_deliveries; i++) {
-		struct flight delivery = flights[i];
-		if(delivery.stage == -1) { // invalid delivery
+		struct delivery delivery = deliveries[i];
+		if(delivery.status == -1) { // invalid delivery
 			continue;
 		} else { // save the delievery data to rank buffer
 			rank_buffer[ind] = delivery.id;
 			rank_buffer[ind+1] = delivery.source_id;
 			rank_buffer[ind+2] = delivery.destination_id;
-			rank_buffer[ind+3] = delivery.stage;
+			rank_buffer[ind+3] = delivery.status;
 			rank_buffer[ind+4] = delivery.starting_time;
-			rank_buffer[ind+5] = delivery.landing_time;
-			rank_buffer[ind+6] = delivery.travel_time;
+			rank_buffer[ind+5] = delivery.arriving_time;
+			rank_buffer[ind+6] = delivery.transit_time;
 			rank_buffer[ind+7] = delivery.wait_time;
 			ind += 8;
 		}
@@ -179,7 +179,7 @@ void MPI_simulate_deliveries(int hybrid, int world_rank, int world_size) {
     int incoming_deliveries_count[world_size];
     int outgoing_deliveries_count[world_size+1];    
     for(int i = 0; i < world_size; i++){
-        outgoing_deliveries[i] = 0;
+        outgoing_deliveries_count[i] = 0;
     }
 
 	double start_time;
@@ -239,10 +239,14 @@ int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
 
     // Get the number of processes
+    //int world_size;
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	//numranks = world_size;
     
     // Get the rank of the process
+    //int world_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+	//myrank = world_rank;
 
     if (argc < 4 && world_rank == 0) { // check command line arguments
         printf("Simulation requires at least three arguments: filename, number of deliveries, and number of tansit centers.\n");
