@@ -1,1 +1,0 @@
-sbatch -N 1 --partition=el8 --gres=gpu:6 -t 30 -o /gpfs/u/home/PCPC/PCPCnsss/scratch/Project/output.out ./run.sh
