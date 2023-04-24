@@ -83,15 +83,26 @@ Weak scaling:
 1 compute node:
 total deliveries: 786432 = 48/2*32^3
 total locations: 6144 = 48/2*2^8
+input file size: 100663296
+output file size: 6291456
+
 2 compute node:
 total deliveries: 1572864 = 48*32^3
 total locations: 12288 = 48*2^8
+input file size: 201326592
+output file size: 12582912
+
 4 compute node:
 total deliveries: 3145728 = 2*48*32^3
 total locations: 24576 = 2*48*2^8
+input file size: 402653184
+output file size: 25165824
+
 8 compute node:
 total deliveries: 6291456 = 4*48*32^3
 total locations: 49152 = 4*48*2^8
+input file size: 805306368
+output file size: 50331648
 
 MPI_rank only: sim_kernel<<<1,1>>>
 1 compute node 32 ranks:

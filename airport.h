@@ -4,26 +4,22 @@
 #include<stdbool.h>
 #include<string.h>
 
+// Global constants
 #define clock_frequency 512000000
 #define LINE_SIZE 128
 
 // Transit center for delivery
 struct transit_center{
 	int id; // transit center id
-	struct runway *conveyor_belt; // array of conveyor belts
+	struct conveyor_belt* conveyor_belt; // array of conveyor belts
 	int num_conveyor_belts; // number of conveyor belts in the transit center
 };
 
-// Statuses of a delivery in simulation
-enum statuses{
-	LOST_DELIVERY = -1,
-	WAITING = 0,
-	STAMPED = 1,
-	LEAVE_SOURCE = 2,
-	IN_TRANSIT = 3,
-	ARRIVE_TO_DES = 4,
-	PROCESSING = 5,
-	DELIVERED = 6
+// A single conveyor_belt in a transit center. Status is used to ensure one delivery processed at a time on conveyor belt.
+struct conveyor_belt{
+	int id;
+	int status;
+	int last_access;
 };
 
 // Delivery in simulation
@@ -40,9 +36,14 @@ struct delivery{
 	unsigned int wait_time;
 };
 
-// A single conveyor_belt in a transit center. Status is used to ensure one delivery processed at a time on conveyor belt.
-struct conveyor_belt{
-	int id;
-	int status;
-	int last_access;
+// Statuses of a delivery in simulation
+enum statuses{
+	LOST_DELIVERY = -1,
+	WAITING = 0,
+	STAMPED = 1,
+	LEAVE_SOURCE = 2,
+	IN_TRANSIT = 3,
+	ARRIVE_TO_DES = 4,
+	PROCESSING = 5,
+	DELIVERED = 6
 };
