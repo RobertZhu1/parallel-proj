@@ -1,40 +1,47 @@
+#include<stdio.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<stdbool.h>
+#include<string.h>
 
-// A representation of an airport, containing an id and a variable number of runways
-struct airport{
-	int id;
-	struct runway *runways;
-	int num_runways;
+#define clock_frequency 512000000
+#define LINE_SIZE 128
+
+// Transit center for delivery
+struct transit_center{
+	int id; // transit center id
+	struct runway *conveyor_belt; // array of conveyor belts
+	int num_conveyor_belts; // number of conveyor belts in the transit center
 };
 
-// Stages to represent the different stages that a flight can be in.
-enum stages{
-	INVALID_FLIGHT = -1,
+// Statuses of a delivery in simulation
+enum statuses{
+	LOST_DELIVERY = -1,
 	WAITING = 0,
-	PREPARING_TO_TAKEOFF = 1,
-	TAKEOFF = 2,
-	CRUISING = 3,
-	PREPARING_TO_LAND = 4,
-	LANDING = 5,
-	LANDED = 6
+	STAMPED = 1,
+	LEAVE_SOURCE = 2,
+	IN_TRANSIT = 3,
+	ARRIVE_TO_DES = 4,
+	PROCESSING = 5,
+	DELIVERED = 6
 };
 
-// A representation of a flight, containing information to use in simulation
-struct flight{
+// Delivery in simulation
+struct delivery{
 	int id;
 	int source_id;
 	int destination_id;
-	int stage;
-	int current_runway_id;
+	int status;
+	int current_conveyor_id;
 	unsigned int starting_time;
-	unsigned int landing_time;
-	unsigned int travel_time;
-	unsigned int taxi_time;
+	unsigned int arriving_time;
+	unsigned int transit_time;
+	unsigned int processing_time;
 	unsigned int wait_time;
 };
 
-// A single runway in an airport. Status represents a mutex to ensure one flight
-// per runway.
-struct runway{
+// A single conveyor_belt in a transit center. Status is used to ensure one delivery processed at a time on conveyor belt.
+struct conveyor_belt{
 	int id;
 	int status;
 	int last_access;
