@@ -11,7 +11,7 @@
 // Transit center for delivery
 struct transit_center{
 	int id; // transit center id
-	struct runway *conveyor_belt; // array of conveyor belts
+	struct conveyor_belt* conveyor_belt; // array of conveyor belts
 	int num_conveyor_belts; // number of conveyor belts in the transit center
 };
 
