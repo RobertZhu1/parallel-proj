@@ -1,48 +1,45 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<unistd.h>
-#include<stdbool.h>
 #include<mpi.h>
-#include<string.h>
 #include "airport.h"
 #include "clockcycle.h"
 
-#define clock_frequency 512000000
-#define LINE_SIZE 128
-
 // The airports of each rank are stored here
-struct airport *airports;
-int num_airports;
+struct transit_center *transit_centers;
+int num_transit_centers;
 
 // The flights departing from airports in current MPI rank
-struct flight *flights;
-int num_flights;
+struct delivery *deliveries;
+int num_deliveries;
 
 // The flights being sent to and rcvd from are stored here
-struct flight **g_send_flights;
-struct flight *g_recv_flights;
+struct delivery **outgoing_deliveries;
+struct delivery *incoming_deliveries;
 
-int myrank = 0; // Rank number of current MPI rank
-int numranks = 0; // Total number of MPI ranks
+int world_rank = 0; // Rank number of current MPI rank
+int world_size = 0; // Total number of MPI ranks
 
 // Functions defined in the cuda file (externed with C)
 extern void sim_initMaster();
-extern bool sim_kernelLaunch(int* count_to_send, unsigned int current_time, int hybrid);
+extern bool sim_kernelLaunch(int* outgoing_deliveries_count, unsigned int current_time, int hybrid);
 
+/***********************************************************************************************************/
+// Input: None
+// Output: MPI_Datatype delivery_struct
+// Purpose: Translate the delivery_struct into a MPI datatype
+/***********************************************************************************************************/
 MPI_Datatype getDeliveryDatatype(){
     int block_lengths[10] = {1,1,1,1,1,1,1,1,1,1};
     MPI_Datatype types[10] = {MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_UNSIGNED, MPI_UNSIGNED, MPI_UNSIGNED, MPI_UNSIGNED, MPI_UNSIGNED};
     MPI_Aint relloc[10];
-    relloc[0] = offsetof(struct flight, id);
-    relloc[1] = offsetof(struct flight, source_id);
-    relloc[2] = offsetof(struct flight, destination_id);
-    relloc[3] = offsetof(struct flight, stage);
-    relloc[4] = offsetof(struct flight, current_runway_id);
-    relloc[5] = offsetof(struct flight, starting_time);
-    relloc[6] = offsetof(struct flight, landing_time);
-    relloc[7] = offsetof(struct flight, travel_time);
-    relloc[8] = offsetof(struct flight, taxi_time);
-    relloc[9] = offsetof(struct flight, wait_time);
+    relloc[0] = offsetof(struct delivery, id);
+    relloc[1] = offsetof(struct delivery, source_id);
+    relloc[2] = offsetof(struct delivery, destination_id);
+    relloc[3] = offsetof(struct delivery, status);
+    relloc[4] = offsetof(struct delivery, current_conveyor_id);
+    relloc[5] = offsetof(struct delivery, starting_time);
+    relloc[6] = offsetof(struct delivery, arriving_time);
+    relloc[7] = offsetof(struct delivery, transit_time);
+    relloc[8] = offsetof(struct delivery, processing_time);
+    relloc[9] = offsetof(struct delivery, wait_time);
 
     MPI_Datatype delivery_struct;
     MPI_Type_create_struct(10, block_lengths, relloc, types, &delivery_struct);
@@ -51,6 +48,11 @@ MPI_Datatype getDeliveryDatatype(){
     return delivery_struct;
 }
 
+/***********************************************************************************************************/
+// Input: char pointer filename, integer world_rank, integer world_size
+// Output: None
+// Purpose: Read in deliveries at the the assigned slot of input file using parallel MPI I/O
+/***********************************************************************************************************/
 void MPI_read_input(char* file_name, int world_rank, int world_size) {
 	double start_time;
 	// ---------- Timed Portion Starts ----------
@@ -115,6 +117,11 @@ void MPI_read_input(char* file_name, int world_rank, int world_size) {
 	// ---------- Timed Portion Ends ----------
 }
 
+/***********************************************************************************************************/
+// Input: integer num_deliveries, integer world_rank, integer world_size
+// Output: None
+// Purpose: Write the processed deliveries to the assigned slot of output file using parallel MPI I/O
+/***********************************************************************************************************/
 void MPI_write_output(int num_deliveries, int world_rank, int world_size) {
 	double start_time;
 	// ---------- Timed Portion Starts ----------
@@ -159,13 +166,18 @@ void MPI_write_output(int num_deliveries, int world_rank, int world_size) {
 	// ---------- Timed Portion Ends ----------
 }
 
+/***********************************************************************************************************/
+// Input: integer hybrid, integer world_rank, integer world_size
+// Output: None
+// Purpose: Simulate status of each delivery at discrete time step using MPI Communication and COUDA
+/***********************************************************************************************************/
 void MPI_simulate_deliveries(int hybrid, int world_rank, int world_size) {
 	// Initialization of MPI communication for deliveries across ranks
 	MPI_Datatype delivery_struct = getDeliveryDatatype();
 	MPI_Request request[2*(world_size-1)];
     MPI_Status status[2*(world_size-1)];
-    int incoming_deliveries[world_size];
-    int outgoing_deliveries[world_size+1];    
+    int incoming_deliveries_count[world_size];
+    int outgoing_deliveries_count[world_size+1];    
     for(int i = 0; i < world_size; i++){
         outgoing_deliveries[i] = 0;
     }
@@ -182,9 +194,9 @@ void MPI_simulate_deliveries(int hybrid, int world_rank, int world_size) {
         for (i = 0, j = 0; i < world_size; i++) {
             if (i != world_rank) {
 				// Get the number of deliveries rank i should prepare to receive from the other ranks
-                MPI_Irecv(&incoming_deliveries[i], 1, MPI_INT, i, t, MPI_COMM_WORLD, &request[j]);
+                MPI_Irecv(&incoming_deliveries_count[i], 1, MPI_INT, i, t, MPI_COMM_WORLD, &request[j]);
 				// Notify the other ranks of the number of deliveries they should receive from rank i
-                MPI_Isend(&outgoing_deliveries[i], 1, MPI_INT, i, t, MPI_COMM_WORLD, &request[j+world_size-1]);
+                MPI_Isend(&outgoing_deliveries_count[i], 1, MPI_INT, i, t, MPI_COMM_WORLD, &request[j+world_size-1]);
                 j++;
             }
         }
@@ -194,10 +206,10 @@ void MPI_simulate_deliveries(int hybrid, int world_rank, int world_size) {
         for (i = 0, j = 0; i < world_size; i++) {
             if(i != world_rank){
 				// Rank i gets the deliveries from the other ranks according the the delivery count updates received previously
-                MPI_Irecv(&g_recv_flights[deliveries_received], incoming_deliveries[i], delivery_struct, i, t, MPI_COMM_WORLD, &request[j]);
+                MPI_Irecv(&incoming_deliveries[deliveries_received], incoming_deliveries_count[i], delivery_struct, i, t, MPI_COMM_WORLD, &request[j]);
 				// Rank i sends the deliveries to the other ranks according the the delivery count updates it made previously
-                MPI_Isend(g_send_flights[i], outgoing_deliveries[i], delivery_struct, i, t, MPI_COMM_WORLD, &request[j+world_size-1]);
-                deliveries_received += incoming_deliveries[i];
+                MPI_Isend(outgoing_deliveries[i], outgoing_deliveries_count[i], delivery_struct, i, t, MPI_COMM_WORLD, &request[j+world_size-1]);
+                deliveries_received += incoming_deliveries_count[i];
                 j++;
             }
         }
@@ -205,12 +217,12 @@ void MPI_simulate_deliveries(int hybrid, int world_rank, int world_size) {
 
         // Resets delivery update counts to 0 at the beginning of each discrete step simulation
         for(i = 0; i < world_size; i++){
-            outgoing_deliveries[i] = 0;
+            outgoing_deliveries_count[i] = 0;
         }
-        outgoing_deliveries[world_size] = deliveries_received; // Store the total number of deliveries moved between ranks
+        outgoing_deliveries_count[world_size] = deliveries_received; // Store the total number of deliveries moved between ranks
 
         // Launches the kernel of delivery status update in hybrid or nonhybrid mode
-		sim_kernelLaunch(outgoing_deliveries, t, hybrid);
+		sim_kernelLaunch(outgoing_deliveries_count, t, hybrid);
     }
 
     MPI_Barrier(MPI_COMM_WORLD); // Synchronize all the ranks before writing to output file
@@ -227,39 +239,34 @@ int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
 
     // Get the number of processes
-    int world_size;
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-	numranks = world_size;
     
     // Get the rank of the process
-    int world_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-	myrank = world_rank;
 
-    char* filename = NULL;
-
-    if(argc < 4 && world_rank == 0){
-        printf("Simulation requires at least three arguments: filename, number of deliveries, and number of locations.\n");
+    if (argc < 4 && world_rank == 0) { // check command line arguments
+        printf("Simulation requires at least three arguments: filename, number of deliveries, and number of tansit centers.\n");
         return 1;
     }
 
     // Reads command line arguments
+	char* filename = NULL;
     filename = argv[1];
-    num_flights = atoi(argv[2]);
-    num_airports = atoi(argv[3]);
+    num_deliveries = atoi(argv[2]);
+    num_transit_centers = atoi(argv[3]);
 
-	// Initializes the world with the specified pattern
+	// Initializes CUDA resources at each rank
     sim_initMaster();
-
+	// Read in the deliveries from input file
 	MPI_read_input(filename, world_rank, world_size);
-
-	if (argc == 5 && strcmp(argv[4], "h") == 0) {
+	// Simulate the deliveries
+	if (argc == 5 && strcmp(argv[4], "h") == 0) { // simulate with hybrid mode
 		MPI_simulate_deliveries(1, world_rank, world_size);
-	} else {
+	} else { // simulate with MPI only
 		MPI_simulate_deliveries(0, world_rank, world_size);
 	}
-
-	MPI_write_output(num_flights, world_rank, world_size);
+	// Write the delivery status at end of simulation to output file
+	MPI_write_output(num_deliveries, world_rank, world_size);
 
 	MPI_Finalize();
 }
