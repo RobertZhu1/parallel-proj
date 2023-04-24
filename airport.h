@@ -7,10 +7,10 @@
 #define clock_frequency 512000000
 #define LINE_SIZE 128
 
-// A representation of an airport, containing an id and a variable number of runways
+// transit center class
 struct transit_center {
 	int id; // transit center id
-	struct conveyor_belt* conveyor_belt; // array of conveyor belts
+	struct conveyor_belt* conveyor_belts; // array of conveyor belts
 	int num_conveyor_belts; // number of conveyor belts in the transit center
 };
 
