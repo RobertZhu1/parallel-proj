@@ -15,7 +15,7 @@ We are going to model deliveries throughout one day by processing the deliveries
 ### Generate deliveries
 The **generate.py script** randomly generates a list of deliveries given simulation duration.
 
-Execution: python generate.py 1572864 12288 24 100 delivery_test 
+Execution: python generate.py 1572864 12288 24 100 deliver_test 
 
 This would generate a file named "delivery_test" with 1572864 deliveries within 24 hours. The deliveries would transit in a network of 12288 transit centers. The seed of the random generator would be set to 100.
 
